@@ -9,3 +9,15 @@ curl -X POST http://localhost:8080/rpc \
                "sql": "SELECT * FROM VALIDITY_RULES_RUN_STATE WHERE ROWNUM <= 5"
            }
          }'
+
+
+curl -X POST http://localhost:8080/mcp/tools/run_oracle_sql \
+     -H "Content-Type: application/json" \
+     -d '{
+           "tool": "run_oracle_sql",
+           "sessionId": "test-session",
+           "traceId": "trace-123",
+           "input": {
+             "sql": "SELECT * FROM VALIDITY_RULES_RUN_STATE WHERE ROWNUM <= 5"
+           }
+         }'
