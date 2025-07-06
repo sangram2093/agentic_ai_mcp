@@ -1,12 +1,17 @@
-from fastmcp import tool, FastMCP
+from fastmcp import FastMCP
 import cx_Oracle
 
-@tool()
-def run_oracle_sql(sql: str) -> list:
+# Create FastMCP instance
+mcp = FastMCP(name="OracleMCP")
+
+@mcp.tool()
+def run_oracle_sql(sql: str) -> list[dict]:
+    """
+    Execute a SELECT SQL query on Oracle and return results as a list of dicts.
+    """
     dsn = cx_Oracle.makedsn("HOST", PORT, service_name="SERVICE")
     conn = cx_Oracle.connect(user="USERNAME", password="PASSWORD", dsn=dsn)
     cur = conn.cursor()
-    
     try:
         cur.execute(sql)
         cols = [desc[0] for desc in cur.description]
@@ -18,10 +23,6 @@ def run_oracle_sql(sql: str) -> list:
         cur.close()
         conn.close()
 
-# MCP app start
 if __name__ == "__main__":
-    app = FastMCP(
-        tools=[run_oracle_sql],
-        transport="streamable-http",
-    )
-    app.serve(port=8080)
+    # Run server over streamable HTTP on port 8080
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=8080)
