@@ -1,11 +1,15 @@
 from fastmcp import FastMCP
 import cx_Oracle
+from pydantic import BaseModel
 
 # Create FastMCP instance
 mcp = FastMCP(name="OracleMCP")
 
+class SQLRequest(BaseModel):
+    sql: str
+
 @mcp.tool()
-def run_oracle_sql(sql: str) -> list[dict]:
+def run_oracle_sql(input: SQLRequest) -> list[dict]:
     """
     Execute a SELECT SQL query on Oracle and return results as a list of dicts.
     """
