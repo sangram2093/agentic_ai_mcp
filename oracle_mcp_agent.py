@@ -1,27 +1,47 @@
-import vertexai
-from adk.type import Tool
-from adk.dsl.agent import agent
-from adk.dsl.steps import call, finish
-from adk.dsl.tool import remote_tool
-from vertexai.generative_models import GenerativeModel
+from google.adk.tools import FunctionTool
+from google.adk.agents import LlmAgent
+from google.adk.code_executors import BuiltInCodeExecutor
+from google.adk.sessions import InMemorySessionService
+import cx_Oracle
+import os
+from vertexai import init
 
-# Init Gemini
-vertexai.init(project="your-project-id", location="us-central1")
-gemini_model = GenerativeModel("gemini-pro")
+# Initialize Gemini
+init(project="your-gcp-project-id", location="us-central1")  # Replace with yours
 
-# Define the MCP tool
-run_sql_tool = remote_tool(
-    url="http://localhost:8080",  # Replace with Cloud Run URL later
-    tool="run_oracle_sql",
-    input_type="str",
-    output_type="list[dict]"
-)
+# Oracle connection info from env
+ORACLE_USER = os.getenv("ORACLE_USER")
+ORACLE_PASS = os.getenv("ORACLE_PASS")
+ORACLE_HOST = os.getenv("ORACLE_HOST")
+ORACLE_PORT = os.getenv("ORACLE_PORT", "1521")
+ORACLE_SERVICE = os.getenv("ORACLE_SERVICE")
 
-@agent
-def oracle_agent(user_input: str):
-    # Step 1: Generate SQL
-    prompt = f"""
-You are a data analyst. The Oracle table VALIDITY_RULES_RUN_STATE has the columns:
+@FunctionTool
+def run_oracle_sql(sql: str) -> list[dict]:
+    """
+    Executes a SELECT SQL query on Oracle and returns rows as a list of dicts.
+    """
+    dsn = cx_Oracle.makedsn(ORACLE_HOST, ORACLE_PORT, service_name=ORACLE_SERVICE)
+    conn = cx_Oracle.connect(user=ORACLE_USER, password=ORACLE_PASS, dsn=dsn)
+    cur = conn.cursor()
+    try:
+        cur.execute(sql)
+        cols = [desc[0] for desc in cur.description]
+        rows = cur.fetchall()
+        return [dict(zip(cols, row)) for row in rows]
+    except Exception as e:
+        return [{"error": str(e)}]
+    finally:
+        cur.close()
+        conn.close()
+
+# Create the agent
+oracle_agent = LlmAgent(
+    name="oracle_query_agent",
+    model="gemini-1.5-pro",
+    description="Query Oracle data validation table",
+    instruction="""
+You are an expert in querying Oracle SQL. The table VALIDITY_RULES_RUN_STATE has these columns:
 - DATA_FEED_ID
 - RUN_DATE
 - DATA_RULE_NAME
@@ -33,15 +53,10 @@ You are a data analyst. The Oracle table VALIDITY_RULES_RUN_STATE has the column
 - DATA_NULL_BLANK_COUNT
 - DATE_CREATED
 
-Write a SQL SELECT query (no semicolon, no comments) for this user request:
-\"{user_input}\"
-"""
-    sql_response = gemini_model.generate_content(prompt)
-    sql = sql_response.text.strip()
-    print("\nGenerated SQL:\n", sql)
-
-    # Step 2: Run the SQL using the MCP tool
-    result = call(run_sql_tool, sql)
-
-    # Step 3: Return the results
-    finish(f"Query Result:\n{result}")
+Use this to generate SQL for a user's question, then call the run_oracle_sql tool.
+Only use SELECT queries. Do not include semicolons or comments.
+""",
+    tools=[run_oracle_sql],
+    code_executor=BuiltInCodeExecutor(),
+    session_service=InMemorySessionService()
+)
