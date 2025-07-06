@@ -1,0 +1,11 @@
+curl -X POST http://localhost:8080/rpc \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/json, text/event-stream" \
+     -d '{
+           "jsonrpc": "2.0",
+           "id": "1",
+           "method": "run_oracle_sql",
+           "params": {
+               "sql": "SELECT * FROM VALIDITY_RULES_RUN_STATE WHERE ROWNUM <= 5"
+           }
+         }'
