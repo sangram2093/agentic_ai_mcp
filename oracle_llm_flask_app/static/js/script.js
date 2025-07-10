@@ -1,4 +1,3 @@
-
 function sendQuestion() {
     const question = document.getElementById("question").value;
     fetch("/ask", {
@@ -14,9 +13,15 @@ function sendQuestion() {
         chat.appendChild(userMsg);
 
         const responseMsg = document.createElement("div");
-        responseMsg.innerHTML = "<b>Gemini:</b><pre>" + JSON.stringify(data.data, null, 2) + "</pre>";
-        chat.appendChild(responseMsg);
 
+        // Show data and any explanation from LLM
+        let resultText = data.data && Object.keys(data.data).length
+            ? "<pre>" + JSON.stringify(data.data, null, 2) + "</pre>"
+            : "<i>No tabular data returned.</i>";
+        let explanation = data.message ? "<p><b>LLM:</b> " + data.message + "</p>" : "";
+
+        responseMsg.innerHTML = explanation + resultText;
+        chat.appendChild(responseMsg);
         chat.scrollTop = chat.scrollHeight;
         document.getElementById("question").value = "";
     });
