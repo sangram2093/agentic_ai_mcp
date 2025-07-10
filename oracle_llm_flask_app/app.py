@@ -1,4 +1,3 @@
-
 from flask import Flask, request, render_template, jsonify
 from google.adk.agents import Agent
 from google.adk.runners import InMemoryRunner
@@ -7,12 +6,12 @@ from vertexai import init
 import json, os, cx_Oracle
 from datetime import datetime
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', template_folder='templates')
 
 # Init Gemini
 init(project="cd-dev-t4vd-aag-001-1", location="europe-west3")
 
-# Oracle tool
+# Oracle Tool
 def run_oracle_sql(sql: str) -> str:
     dsn = "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCPS)(HOST=traag3u.cd.av.com)(PORT=1701)))(CONNECT_DATA=(SERVICE_NAME=traag3u_app.cd.av.com)))"
     conn = cx_Oracle.connect(user="trace_owner", password="xxxxx", dsn=dsn)
@@ -23,13 +22,14 @@ def run_oracle_sql(sql: str) -> str:
             return json.dumps({"error": "No results"})
         columns = [col[0] for col in cur.description]
         rows = [dict(zip(columns, r)) for r in cur.fetchall()]
+        print("✅ Oracle Rows:", rows)
         return json.dumps(rows, default=str)
     except Exception as e:
         return json.dumps({"error": str(e)})
     finally:
         conn.close()
 
-# Agent setup
+# ADK Agent
 oracle_agent = Agent(
     name="oracle_agent",
     model="gemini-1.5-pro-002",
@@ -44,6 +44,7 @@ Then call `run_oracle_sql` to get results.
 """,
     tools=[run_oracle_sql]
 )
+
 runner = InMemoryRunner(agent=oracle_agent)
 session = runner.session_service.create_session(app_name=runner.app_name, user_id="web")
 
@@ -59,12 +60,21 @@ def ask():
 
     for event in runner.run(user_id=session.user_id, session_id=session.id, new_message=content):
         for part in event.content.parts:
+            text = part.text
             try:
-                raw_result = json.loads(part.text)
+                maybe_json = json.loads(text)
+                if isinstance(maybe_json, list):
+                    raw_result = maybe_json
+                else:
+                    sql_text = text
             except:
-                sql_text = part.text
+                print("⚠️ Not JSON, fallback text:\n", text)
+                sql_text = text
 
-    return jsonify({"data": raw_result, "message": sql_text})
+    return jsonify({
+        "data": raw_result or {},
+        "message": sql_text or "No structured result returned."
+    })
 
 if __name__ == "__main__":
     app.run(debug=True)
